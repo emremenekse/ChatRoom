@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+
+
+<head>
+    <script src="signalr.min.js"></script>
+    <script src="jquery.min.js"></script>
+
+    <script>
+        $(document).ready(() => {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("https://localhost:44345/messagehub")
+                .withAutomaticReconnect([1000, 1000,
+                    2000
+                ]) // 0 2 10 30 sn => Bu fonksiyon bağlantı vardı koptugu durumlarda kullanılır
+                .build();
+
+            async function start() {
+                try {
+                    await connection.start();
+
+                } catch (error) {
+                    setTimeout(() => start(), 2000)
+                }
+            }
+
+            start();
+
+            function animation() {
+                durum.fadeIn(2000, () => {
+                    setTimeout(() => {
+                        durum.fadeOut(2000);
+                    }, 2000)
+                });
+            }
+
+            const durum = $("#durum");
+            connection.onreconnecting(error => {
+                durum.css("background-color", "blue");
+                durum.css("color", "white");
+                durum.html("Bağlantı kuruluyor...");
+                animation();
+            })
+
+            connection.onreconnected(connectionId => {
+                durum.css("background-color", "green");
+                durum.css("color", "white");
+                durum.html("Bağlantı kuruldu...");
+                animation();
+
+            })
+
+            connection.onclose(connectionId => {
+                durum.css("background-color", "red");
+                durum.css("color", "white");
+                durum.html("Bağlantı kurulamadı...");
+                animation();
+
+            })
+
+            connection.on("userJoined", connectionId => {
+                durum.html(`${connectionId} bağlandı.`)
+                durum.css("background-color", "green");
+                animation();
+            })
+
+            connection.on("userLeaved", connectionId => {
+                durum.html(`${connectionId} ayrıldı.`)
+                durum.css("background-color", "red");
+                animation();
+            })
+
+            connection.on("clients", datas => {
+                let text = "";
+                $.each(datas, (index, item) => {
+                    text += `<li>${item}</li>`;
+                });
+                $("#clientler").html(text);
+            })
+
+            $("#btnGonder").click(() => {
+                let message = $("#txtMessage").val();
+                let connectionIds = $("#connectionIds").val().split(",");
+                connection.invoke("SendMessageAsync", message, $("input[name='grup']:checked").val())
+                    .catch(error =>
+                        console
+                        .log(
+                            `Mesaj gönderilirken hata oluştu. ${error}`));
+            })
+            connection.on("receiveMessage", message => {
+                $("#mesajlar").append(message + "<br>")
+            })
+
+            let _connectionId = "";
+            // Bağlantı hiç kurulmadıgı durumlardabu fonksiyon kullanılır
+            connection.on("getConnectionId", connectionId => {
+                _connectionId = connectionId;
+                $("#connectionId").html(`Connection Id : ${connectionId}`)
+            })
+            $("#btnGrubaGir").click(() => {
+                let groupName = $("input[name='grup']:checked").val();
+                connection.invoke("addGroup", _connectionId, groupName).catch(error => console
+                    .log(
+                        `Mesaj gönderilirken hata oluştu. ${error}`));
+            })
+
+
+        });
+    </script>
+</head>
+
+<body>
+    <div style="background-color: black; color: white" id="connectionId"></div>
+    <input type="radio" name="grup" value="A">A
+    <input type="radio" name="grup" value="B">B
+    <input type="radio" name="grup" value="C">C
+    <button id="btnGrubaGir">Gruba Gir</button>
+    <br>
+    <div id="durum" style="display: none;"></div>
+    <input type="text" id="txtMessage" placeholder="Mesaj">
+    <br>
+    <textarea id="connectionIds" cols="30" rows="10" placeholder="ConnectionId"></textarea>
+    <button id="btnGonder">Gönder</button>
+    <div id="mesajlar">> </div>
+</body>
+
+</html>
